@@ -1,5 +1,5 @@
 ---
-{"title":"index","auther":"four1er","created_at":"2025-02-10 00:49","last modify":"2025-02-10 00:49","file path":"index.md","tags":["gardenEntry"],"dg-publish":true,"dg-home":true,"permalink":"/index/","dgPassFrontmatter":true,"created":"2025-02-10T02:27:08.819+08:00","updated":"2025-02-10T14:29:07.515+08:00"}
+{"title":"index","auther":"four1er","created_at":"2025-02-10 00:49","last modify":"2025-02-10 00:49","file path":"index.md","tags":["gardenEntry"],"dg-publish":true,"dg-home":true,"permalink":"/index/","dgPassFrontmatter":true,"created":"2025-02-10T02:27:08.819+08:00","updated":"2025-02-10T14:30:00.282+08:00"}
 ---
 
 # HOME PAGE
@@ -22,9 +22,9 @@ Worker Harder
 { .block-language-dataview}
 
 ## 归档
-| 月份       | 数量   |
-| -------- | ---- |
-| 2025年 2月 | 84 篇 |
+| 月份       | 数量  |
+| -------- | --- |
+| 2025年 2月 | 3 篇 |
 
 { .block-language-dataview}
 
