@@ -1,6 +1,7 @@
 ---
-{"title":"ZooKeeper","auther":"four1er","created_at":"2025-01-23 10:46","last modify":"2025-01-23 10:46","file path":"藏经阁/Distributed System/6.824/ZooKeeper.md","tags":["distributed_sytem","zookeeper"],"dg-publish":true,"permalink":"/藏经阁/Distributed System/6.824/ZooKeeper/","dgPassFrontmatter":true,"created":"2025-02-05T10:35:59.677+08:00","updated":"2025-02-11T12:03:35.629+08:00"}
+{"title":"ZooKeeper","auther":"four1er","created_at":"2025-01-23 10:46","last modify":"2025-01-23 10:46","file path":"藏经阁/Distributed System/6.824/ZooKeeper.md","tags":["distributed_sytem","zookeeper"],"dg-publish":true,"permalink":"/藏经阁/Distributed System/6.824/ZooKeeper/","dgPassFrontmatter":true,"created":"2025-02-05T10:35:59.677+08:00","updated":"2025-02-11T15:28:14.537+08:00"}
 ---
+
 
 # 线性一致
 如果一个服务是线性一致的，那么它表现的就像只有一个服务器。一个线性一致系统中的执行历史中的操作是非并发的。
@@ -65,4 +66,38 @@ S2 A B C
 
 > [!summary] Zookeeper 可以保证单个客户端的请求是线性一致的。
 
-发的
+# 同步操作
+Zookeeper 中有一个 sync 操作类型，可以读出最新的数据。
+如果我想读到最新的数据，我可以先发送一个 sync 请求，它的效果相当于一个写请求，它最终会出现在所有的副本 log 中。尽管我只关心与我交互的副本，但是这个操作会同步到所有的副本。
+接下来再发送读请求时，cli 告诉副本，在看到我上一次 sync 请求之前，不要返回我的 read 请求。
+如果这里把 sync 看成是一个写请求，这里实际上符合了 FIFO 客户端请求序列，因为读请求必须至少要看到同一个客户端前一个写请求对应的状态。
+# 就绪文件 Ready file/znode
+我们假设有另外一个分布式系统，这个分布式有一个 Master 节点，而 Master 节点在 Zookeeper 中维护了一个配置，这个配置对应了一些 file（也就是 znode）。通过这个配置，描述了有关分布式系统的一些信息，例如所有 worker 的 IP 地址，或者当前谁是 Master。所以，现在 Master 在更新这个配置，同时，或许有大量的客户端需要读取相应的配置，并且需要发现配置的每一次变化。所以，现在的问题是，配置被分割成了多个 file，我们还能有原子效果的更新吗？
+为什么要有原子效果的更新呢？因为只有这样，其他的客户端才能读出完整更新的配置，而不是读出更新了一半的配置。这是人们使用 Zookeeper 管理配置文件时的一个经典场景。
+假设 Master 做了一系列写请求来更新配置，那么我们的分布式系统中的 Master 会以这种顺序执行写请求。首先我们假设有一些 Ready file，就是以 Ready 为名字的 file。如果 Ready file 存在，那么允许读这个配置。如果 Ready file 不存在，那么说明配置正在更新过程中，我们不应该读取配置。
+所以，如果 Master 要更新配置，那么第一件事情是删除 Ready file。之后它会更新各个保存了配置的 Zookeeper file（也就是 znode），这里或许有很多的 file。当所有组成配置的 file 都更新完成之后，Master 会再次创建 Ready file。目前为止，这里的语句都很直观，这里只有写请求，没有读请求，而 Zookeeper 中写请求可以确保以线性顺序执行。
+为了确保这里的执行顺序，Master 以某种方式为这些请求打上了 tag，表明了对于这些写请求期望的执行顺序。之后 Zookeeper Leader 需要按照这个顺序将这些写请求加到多副本的 Log 中。
+接下来，所有的副本会履行自己的职责，按照这里的顺序一条条执行请求。它们也会删除（自己的）Ready file，之后执行这两个写请求，最后再次创建（自己的）Ready file。所以，这里是写请求，顺序还是很直观的。
+对于读请求来说。假设我们有一些 worker 节点需要读取当前的配置。我们可以假设 Worker 节点首先会检查 Ready file 是否存在。如果不存在，那么 Worker 节点会过一会再重试。所以，我们假设 Ready file 存在，并且是经历过一次重新创建。之后，如果文件存在，那么客户端会接下来读 f1 和 f2。
+这里，有关 FIFO 客户端序列中有意思的地方是，如果判断 Ready file 的确存在，那么也是从与客户端交互的那个副本得出的判断。所以，这里通过读请求发现 Ready file 存在，可以说明那个副本看到了 Ready file 的重新创建这个请求（由 Leader 同步过来的）。
+但是这里还是存在一些问题。
+考虑如下场景：
+假设 Master 在完成配置更新之后创建了 Ready file, 之后 master 又要更新配置，那么它又需要将 ready file 删除，之后再执行一些写请求。
+这里可能有的问题是，需要读取配置的客户端，首先会在这个点，通过调用 exist 来判断 Ready file 是否存在。在某个时间点，Ready file 是存在的。之后，随着时间的推移，客户端读取了组成配置的第一个 file，但是，之后在读取第二个 file 时，Master 可能正在更新配置。所以现在客户端读到的是一个不正常的，由旧配置的 f1 和新配置的 f2 组成的配置。
+Zookeeper 的 API 实际上设计的非常巧妙，它可以处理这里的问题。之前说过，客户端会发送 exists 请求来查询，Ready file 是否存在。但是实际上，客户端不仅会查询 Ready file 是否存在，还会建立一个针对这个 Ready file 的 watch。
+这意味着如果 Ready file 有任何变更，例如，被删除了，或者它之前不存在然后被创建了，副本会给客户端发送一个通知。在这个场景中，如果 Ready file 被删除了，副本会给客户端发送一个通知。
+Zookeeper 可以保证，如果客户端向某个副本 watch 了某个 Ready file，之后又发送了一些读请求，当这个副本执行了一些会触发 watch 通知的请求，那么 Zookeeper 可以确保副本将 watch 对应的通知，先发给客户端，再处理触发 watch 通知请求（也就是删除 Ready file 的请求），在 Log 中位置之后才执行的读请求（有点绕，后面会有更多的解释）。
+在这个例子中说明就是，如果我们之前设置好了 watch，Zookeeper 可以保证如果某个人删除了 Ready file，它会产生一个通知，这个通知可以确保在读 f2 的请求响应之前发送给客户端。
+客户端在完成读所有的配置之前，如果对配置有了新的更改，Zookeeper 可以保证客户端在收到删除 Ready file 的通知之前，看到的都是配置更新前的数据。
+
+> [!summary] 也就是说，客户端读取配置读了一半，如果收到了 Ready file 删除的通知，就可以放弃这次读，再重试读了
+
+# Zookeeper API
+Zookeeper 的 API 某种程度上来说像是一个文件系统。它有一个层级化的目录结构，有一个根目录 root，之后每个应用程序有自己的子目录。
+比如说应用程序 1 将自己的文件保存在 APP1 目录下，应用程序 2 将自己的文件保存在 APP2 目录下，这些目录又可以包含文件和其他的目录。
+
+> [!note] 为什么要这么设计？
+> 因为 Zookeeper 需要考虑到被许多可能完全不相关的服务共享使用。所以需要一个命名系统来区分不同服务的信息。
+
+所以 Zookeeper 的 API 看起来像是一个文件系统，但又不是一个实际的文件系统，只是在内部以路径名的形式命名各种对象。
+假设应用程序 2 下面有 X，Y，Z 这些文件。当你通过 RPC 向 Zookeeper 请求数据时，你可以直接指定/APP2/X。这就是一种层级化的命名方式。

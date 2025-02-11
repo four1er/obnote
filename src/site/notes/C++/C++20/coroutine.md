@@ -1,6 +1,7 @@
 ---
-{"title":"coroutine","auther":"four1er","created_at":"2025-02-06 00:21","last modify":"2025-02-06 00:21","file path":"C++/C++20/coroutine.md","tags":["coroutine","Cpp"],"dg-publish":true,"permalink":"/C++/C++20/coroutine/","dgPassFrontmatter":true,"created":"2025-02-10T01:26:10.742+08:00","updated":"2025-02-10T14:15:15.256+08:00"}
+{"title":"coroutine","auther":"four1er","created_at":"2025-02-06 00:21","last modify":"2025-02-06 00:21","file path":"C++/C++20/coroutine.md","tags":["coroutine","Cpp"],"dg-publish":true,"permalink":"/C++/C++20/coroutine/","dgPassFrontmatter":true,"created":"2025-02-10T01:26:10.742+08:00","updated":"2025-02-11T13:01:06.585+08:00"}
 ---
+
 
 # Basic
 ## 协程的分类
@@ -575,7 +576,7 @@ class UserFacing {
     }
 };
 ```
-## 编写自定义的 `awaiters
+## 编写自定义的 `awaiters`
 每次你的协程阻塞的时候都会去构造一个 `awaiter` 对象，并使用这个 `awaiter` 对象来控制这个阻塞的影响。
 我们之前一直使用了标准库提供的 `std::suspend_always` 和 `std::suspend_never`, 现在是时候来实现我们自己的 `awaiter` 了。
 Awaiter type 并不需要继承自任何类，它可以是任何类型，只需要实现三个方法即可：
