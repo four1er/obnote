@@ -1,5 +1,5 @@
 ---
-{"title":"ZooKeeper","auther":"four1er","created_at":"2025-01-23 10:46","last modify":"2025-01-23 10:46","file path":"藏经阁/Distributed System/6.824/ZooKeeper.md","tags":["distributed_sytem","zookeeper"],"dg-publish":true,"permalink":"/藏经阁/Distributed System/6.824/ZooKeeper/","dgPassFrontmatter":true,"created":"2025-02-05T10:35:59.677+08:00","updated":"2025-02-11T15:28:14.537+08:00"}
+{"title":"ZooKeeper","auther":"four1er","created_at":"2025-01-23 10:46","last modify":"2025-01-23 10:46","file path":"藏经阁/Distributed System/6.824/ZooKeeper.md","tags":["distributed_sytem","zookeeper"],"dg-publish":true,"permalink":"/藏经阁/Distributed System/6.824/ZooKeeper/","dgPassFrontmatter":true,"created":"2025-03-24T10:39:31.787+08:00","updated":"2025-03-24T10:39:31.787+08:00"}
 ---
 
 
@@ -101,3 +101,15 @@ Zookeeper 的 API 某种程度上来说像是一个文件系统。它有一个�
 
 所以 Zookeeper 的 API 看起来像是一个文件系统，但又不是一个实际的文件系统，只是在内部以路径名的形式命名各种对象。
 假设应用程序 2 下面有 X，Y，Z 这些文件。当你通过 RPC 向 Zookeeper 请求数据时，你可以直接指定/APP2/X。这就是一种层级化的命名方式。
+这里的文件和目录都被称为 znodes。Zookeeper 中包含了 3 种类型的 znode，了解他们对于解决问题会有帮助。
+1. 第一种 Regular znodes。这种 znode 一旦创建，就永久存在，除非你删除了它。
+2. 第二种是 Ephemeral znodes。如果 Zookeeper 认为创建它的客户端挂了，它会删除这种类型的 znodes。这种类型的 znodes 与客户端会话绑定在一起，所以客户端需要时不时的发送心跳给 Zookeeper，告诉 Zookeeper 自己还活着，这样 Zookeeper 才不会删除客户端对应的 ephemeral znodes。
+3. 最后一种类型是 Sequential znodes。它的意思是，当你想要以特定的名字创建一个文件，Zookeeper 实际上创建的文件名是你指定的文件名再加上一个数字。当有多个客户端同时创建 Sequential 文件时，Zookeeper 会确保这里的数字不重合，同时也会确保这里的数字总是递增的。
+
+Zookeeper 以 RPC 的方式暴露以下 API。
+- `CREATE(PATH，DATA，FLAG)`。入参分别是文件的全路径名 PATH，数据 DATA，和表明 znode 类型的 FLAG。这里有意思的是，CREATE 的语义是排他的。也就是说，如果我向 Zookeeper 请求创建一个文件，如果我得到了 yes 的返回，那么说明这个文件之前不存在，我是第一个创建这个文件的客户端；如果我得到了 no 或者一个错误的返回，那么说明这个文件之前已经存在了。所以，客户端知道文件的创建是排他的。在后面有关锁的例子中，我们会看到，如果有多个客户端同时创建同一个文件，实际成功创建文件（获得了锁）的那个客户端是可以通过 CREATE 的返回知道的。
+- `DELETE(PATH，VERSION)`。入参分别是文件的全路径名 PATH，和版本号 VERSION。有一件事情我之前没有提到，每一个 znode 都有一个表示当前版本号的 version，当 znode 有更新时，version 也会随之增加。对于 delete 和一些其他的 update 操作，你可以增加一个 version 参数，表明当且仅当 znode 的当前版本号与传入的 version 相同，才执行操作。当存在多个客户端同时要做相同的操作时，这里的参数 version 会非常有帮助（并发操作不会被覆盖）。所以，对于 delete，你可以传入一个 version 表明，只有当 znode 版本匹配时才删除。
+- `EXIST(PATH，WATCH)`。入参分别是文件的全路径名 PATH，和一个有趣的额外参数 WATCH。通过指定 watch，你可以监听对应文件的变化。不论文件是否存在，你都可以设置 watch 为 true，这样 Zookeeper 可以确保如果文件有任何变更，例如创建，删除，修改，都会通知到客户端。此外，判断文件是否存在和 watch 文件的变化，在 Zookeeper 内是原子操作。所以，当调用 exist 并传入 watch 为 true 时，不可能在 Zookeeper 实际判断文件是否存在，和建立 watch 通道之间，插入任何的创建文件的操作，这对于正确性来说非常重要。
+- `GETDATA(PATH，WATCH)`。入参分别是文件的全路径名 PATH，和 WATCH 标志位。这里的 watch 监听的是文件的内容的变化。
+- `SETDATA(PATH，DATA，VERSION)`。入参分别是文件的全路径名 PATH，数据 DATA，和版本号 VERSION。如果你传入了 version，那么 Zookeeper 当且仅当文件的版本号与传入的 version 一致时，才会更新文件。
+- `LIST(PATH)`。入参是目录的路径名，返回的是路径下的所有文件。

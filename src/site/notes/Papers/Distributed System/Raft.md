@@ -1,6 +1,7 @@
 ---
-{"title":"Raft","auther":"four1er","created_at":"2025-01-17 11:45","last modify":"2025-01-17 11:45","file path":"Papers/Raft.md","tags":["distributed_sytem","Raft","papers"],"dg-publish":true,"permalink":"/Papers/Distributed System/Raft/","dgPassFrontmatter":true,"created":"2025-02-06T10:50:22.640+08:00","updated":"2025-02-10T11:09:22.789+08:00"}
+{"title":"Raft","auther":"four1er","created_at":"2025-01-17 11:45","last modify":"2025-01-17 11:45","file path":"Papers/Raft.md","tags":["distributed_sytem","Raft","papers"],"dg-publish":true,"permalink":"/Papers/Distributed System/Raft/","dgPassFrontmatter":true,"created":"2025-03-24T10:39:31.742+08:00","updated":"2025-03-24T10:39:31.742+08:00"}
 ---
+
 
 # 分布式共识算法背景
 ## 分布式系统数据多副本
@@ -219,21 +220,49 @@ Raft 中每一个写操作被封装成一条日志 entry，**每一个 entry 由
 - **提交态**：1）Leader 向 Follower 发起的日志同步消息得到了超过一半 Follower 的接收确认，Leader 将更新 commitIndex 至这个被确认的日志索引，**commitIndex 前的日志均为提交态** 2）Leader 更新 commitIndex 后向 Follower 同步 commitIndex，Follower 更新 commitIndex 与 Leader 一致，commitIndex 前的日志均为提交态
 - **应用态**：日志被提交后就可以被应用于节点状态机进行指令执行，状态机按顺序应用被提交的日志，并更新 lastApplied，**lastApplied 之前的日志均为应用态**
 # Raft 实现
-https://www.youtube.com/watch?v=xztv-zIDLxc
+## 存储（持久化/非持久化）
+### 持久化存储
+1. CurrentTerm，当前任期号。必须持久化存储。**持久化原因**：
+		- 防止节点在重启后使用旧的任期号，导致接受过期的 Leader 消息或发起无效的选举。
+		- 任期号是 Raft 强一致性的核心逻辑之一（如 Leader 选举和日志冲突检测）。
+2. VoteFor，支持当选的 leader id。VoteFor 必须持久化存储。**持久化原因**：
+		- 防止节点在重启后对同一任期重复投票，破坏选举的“一个任期内最多一个 Leader”的约束。
+3. Log Entries，日志条目，每个条目包含命令（Command）、任期号（Term）和索引（Index）。日志条目必须持久化存储。**持久化原因**：
+		- 日志是 Raft 状态机的核心数据，必须持久化以保证已提交的日志在崩溃后不丢失。
+		- 未持久化的日志可能导致已提交的条目被覆盖或丢失，破坏一致性。
+
+### 非持久化数据
+1. CommitIndex，已提交的最高日志条目的索引。非持久化的原因：
+	- 重启后，该数据可以通过与其他节点的通信来恢复。
+2. LastApplied, 已应用到状态机的最高的日志条目的索引。非持久化的原因：
+	- 应用进度是本地状态机的内部状态，重启后可以通过重放日志恢复
+3. NextIndex[], leader 节点持有。非持久化原因：
+	- 这是 Leader 的临时优化推测值，重启后可通过一致性检查（AppendEntries RPC 的冲突解决机制）重新计算。
+4. MatchIndex[], leader 节点持有，非持久化原因：
+	- 类似 NextIndex[], 重启后可以通过 Follower 的响应重新计算。
+
+### 还可能用到的一些属性
+1. Role。节点当前状态（leader、follower、condidate）
+2. 选举超时计时器（Election Timer）
+3. 心跳超时计时器（Heartbeat Timer）
+
+## 接口定义
+
+## 实现解析
 Raft 将共识问题分解成三个相对独立的子问题：
-1. Leader 选举
-2. 日志复制
-3. 安全性
+4. Leader 选举
+5. 日志复制
+6. 安全性
 
 所以我们将从以上三个方面梳理如何实现 raft 算法。
 ## Leader 选举实现
 重新复习一下 leader 选举规则：
-1. 在每一轮任期中，只会出现一个 leader，或者没有 leader。
-2. 当 leader 下线后，集群开始进入新的任期。
-3. 任何节点收到任期比自己任期大的请求时，需要马上跟随对方，并更新自己的任期。
-4. 任何节点收到任期等于自己任期的数据追加请求的时候，需要马上跟随对方。
-5. 在一轮任期的选举中，任何一个节点只能投给一个候选人。
-6. 如果收到任期比自己小的请求直接丢失，否则必须回复。
+7. 在每一轮任期中，只会出现一个 leader，或者没有 leader。
+8. 当 leader 下线后，集群开始进入新的任期。
+9. 任何节点收到任期比自己任期大的请求时，需要马上跟随对方，并更新自己的任期。
+10. 任何节点收到任期等于自己任期的数据追加请求的时候，需要马上跟随对方。
+11. 在一轮任期的选举中，任何一个节点只能投给一个候选人。
+12. 如果收到任期比自己小的请求直接丢失，否则必须回复。
 
 选举过程：**候选人只会给自己投票，跟随者会一直投给第一个找他的候选人，只有得票超出一半的候选人才能成为领导者，所有人都必须跟随胜选的领导者。**
 消息参数：
