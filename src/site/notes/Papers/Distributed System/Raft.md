@@ -1,5 +1,5 @@
 ---
-{"title":"Raft","auther":"four1er","created_at":"2025-01-17 11:45","last modify":"2025-01-17 11:45","file path":"Papers/Raft.md","tags":["distributed_sytem","Raft","papers"],"dg-publish":true,"permalink":"/Papers/Distributed System/Raft/","dgPassFrontmatter":true,"created":"2025-03-24T10:39:31.742+08:00","updated":"2025-03-24T10:39:31.742+08:00"}
+{"title":"Raft","auther":"four1er","created_at":"2025-01-17 11:45","last modify":"2025-01-17 11:45","file path":"Papers/Raft.md","tags":["distributed_sytem","Raft","papers"],"dg-publish":true,"permalink":"/Papers/Distributed System/Raft/","dgPassFrontmatter":true,"created":"2025-04-04T19:37:23.292+08:00","updated":"2025-04-04T19:37:23.292+08:00"}
 ---
 
 
